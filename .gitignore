@@ -1,0 +1,14 @@
+*/._*
+._*
+.snakemake*
+analysis/*
+!analysis/.keep
+benchmark*
+FT-SE6114*
+logs
+raw_data/*
+src/~*
+test*
+
+
+.Rproj.user
