@@ -14,17 +14,20 @@ rule all:
         # mergeLanesAndRename_PE
         expand("raw_data/{samples.sample}-R1.fastq.gz", samples=samples.itertuples()),
         expand("raw_data/{samples.sample}-R2.fastq.gz", samples=samples.itertuples()),
+        # trim_galore_hardtrim5
+        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime.fq.gz", samples=samples.itertuples()),
         # trim_galore
-        expand("analysis/trim_reads/{samples.sample}-R1_val_1.fq.gz", samples=samples.itertuples()),
-        expand("analysis/trim_reads/{samples.sample}-R2_val_2.fq.gz", samples=samples.itertuples()),
+        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime_val_1.fq.gz", samples=samples.itertuples()),
+        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime_val_2.fq.gz", samples=samples.itertuples()),
         # bwa_mem
         expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam", samples=samples.itertuples()),
         # extract_TLEN3
         expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.bam", samples=samples.itertuples()),
         expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.bam.bai", samples=samples.itertuples()),
         # extract_bed
-        expand("analysis/extract_bed/{samples.sample}.TLEN_3.bed", samples=samples.itertuples()),
-        expand("analysis/extract_bed/{samples.sample}.TLEN_3_seq.txt", samples=samples.itertuples()),
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN_3.bed", samples=samples.itertuples()),
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN_3_seq.txt", samples=samples.itertuples()),
 
 rule mergeLanesAndRename:
     input:
@@ -44,19 +47,56 @@ rule mergeLanesAndRename:
     script:
         "src/mergeLanesAndRename.R"
 
+rule trim_galore_hardtrim5:
+    input:
+        R1 = "raw_data/{sample}-R1.fastq.gz",
+        R2 = "raw_data/{sample}-R2.fastq.gz",
+    output:
+        R1 = "analysis/trim_reads/{sample}-R1.50bp_5prime.fq.gz",
+        R2 = "analysis/trim_reads/{sample}-R2.50bp_5prime.fq.gz",
+    log:
+        R1_o = "logs/trim_galore_hardtrim5/{sample}-R1.o",
+        R1_e = "logs/trim_galore_hardtrim5/{sample}-R1.e",
+        R2_o = "logs/trim_galore_hardtrim5/{sample}-R2.o",
+        R2_e = "logs/trim_galore_hardtrim5/{sample}-R2.e",
+    benchmark:
+        "benchmarks/trim_galore_hardtrim5/{sample}.bmk",
+    params:
+        outdir="analysis/trim_reads/",
+    envmodules:
+        "bbc/trim_galore/trim_galore-0.6.0",
+        "bbc/pigz/pigz-2.4",
+    resources:
+        nodes = 1,
+        threads = 4,
+        mem_gb=80,
+    shell:
+        """
+        trim_galore \
+        --hardtrim5 50 \
+        --output_dir {params.outdir} \
+        --cores {resources.threads} \
+        {input.R1} 2> {log.R1_e} 1> {log.R1_o}
+
+        trim_galore \
+        --hardtrim5 50 \
+        --output_dir {params.outdir} \
+        --cores {resources.threads} \
+        {input.R2} 2> {log.R2_e} 1> {log.R2_o}
+        """
 rule trim_galore:
     input:
-        "raw_data/{sample}-R1.fastq.gz",
-        "raw_data/{sample}-R2.fastq.gz"
+        "analysis/trim_reads/{sample}-R1.50bp_5prime.fq.gz",
+        "analysis/trim_reads/{sample}-R2.50bp_5prime.fq.gz",
     output:
-        "analysis/trim_reads/{sample}-R1_val_1.fq.gz",
-        "analysis/trim_reads/{sample}-R1_val_1_fastqc.html",
-        "analysis/trim_reads/{sample}-R1_val_1_fastqc.zip",
-        "analysis/trim_reads/{sample}-R1.fastq.gz_trimming_report.txt",
-        "analysis/trim_reads/{sample}-R2_val_2.fq.gz",
-        "analysis/trim_reads/{sample}-R2_val_2_fastqc.html",
-        "analysis/trim_reads/{sample}-R2_val_2_fastqc.zip",
-        "analysis/trim_reads/{sample}-R2.fastq.gz_trimming_report.txt"
+        "analysis/trim_reads/{sample}-R1.50bp_5prime_val_1.fq.gz",
+        "analysis/trim_reads/{sample}-R1.50bp_5prime_val_1_fastqc.html",
+        "analysis/trim_reads/{sample}-R1.50bp_5prime_val_1_fastqc.zip",
+        "analysis/trim_reads/{sample}-R1.50bp_5prime.fq.gz_trimming_report.txt",
+        "analysis/trim_reads/{sample}-R2.50bp_5prime_val_2.fq.gz",
+        "analysis/trim_reads/{sample}-R2.50bp_5prime_val_2_fastqc.html",
+        "analysis/trim_reads/{sample}-R2.50bp_5prime_val_2_fastqc.zip",
+        "analysis/trim_reads/{sample}-R2.50bp_5prime.fq.gz_trimming_report.txt",
     log:
         stdout="logs/trim_reads/{sample}.o",
         stderr="logs/trim_reads/{sample}.e"
@@ -64,7 +104,6 @@ rule trim_galore:
         "benchmarks/trim_reads/{sample}.bmk"
     params:
         outdir="analysis/trim_reads/",
-        hardtrim5 = 50
     envmodules:
         "bbc/trim_galore/trim_galore-0.6.0",
         "bbc/pigz/pigz-2.4",
@@ -76,18 +115,20 @@ rule trim_galore:
         """
         trim_galore \
         --paired \
-        {input} \
+        --three_prime_clip_R1 99 \
+        --three_prime_clip_R2 99 \
         --output_dir {params.outdir} \
         --cores {resources.threads} \
         -q 20 \
         --fastqc \
+        {input} \
         2> {log.stderr} 1> {log.stdout}
         """
 
 rule bwa_mem:
     input:
-        R1 = "analysis/trim_reads/{sample}-R1_val_1.fq.gz",
-        R2 = "analysis/trim_reads/{sample}-R2_val_2.fq.gz",
+        R1 = "analysis/trim_reads/{sample}-R1.50bp_5prime_val_1.fq.gz",
+        R2 = "analysis/trim_reads/{sample}-R2.50bp_5prime_val_2.fq.gz",
     output:
         sorted_dupremoved_q20_bam = "analysis/align/{sample}.sorted.dupremoved.q20.bam"
     log:
@@ -113,6 +154,7 @@ rule bwa_mem:
         samblaster --removeDups 2> {log.samblaster}| \
         samtools view -@ {resources.threads} -h -q 20 2> {log.samtools_view}| \
         samtools sort -@ {resources.threads} -O BAM -o {output.sorted_dupremoved_q20_bam} 2> {log.samtools_sort}
+        samtools index
         """
 
 rule extract_TLEN3:
@@ -144,14 +186,14 @@ rule extract_TLEN3:
         samtools index -@ {resources.threads} -b {output.TLEN3_bam} 2> {log.index}
         """
 
-rule extract_bed:
+rule extract_TLEN3_bed:
     input:
         TLEN3_bam = "analysis/extract_TLEN3/{sample}.TLEN3.bam",
     output:
-        sam =       temp("analysis/extract_bed/{sample}.TLEN3.sam"),
-        TLEN3_tmp = temp("analysis/extract_bed/{sample}.tmp"),
-        bed =            "analysis/extract_bed/{sample}.TLEN_3.bed",
-        seq =            "analysis/extract_bed/{sample}.TLEN_3_seq.txt",
+        sam =       temp("analysis/extract_TLEN3/{sample}.TLEN3.sam"),
+        TLEN3_tmp = temp("analysis/extract_TLEN3/{sample}.tmp"),
+        bed =            "analysis/extract_TLEN3/{sample}.TLEN_3.bed",
+        seq =            "analysis/extract_TLEN3/{sample}.TLEN_3_seq.txt",
     params:
         ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa"
     log:
@@ -168,7 +210,7 @@ rule extract_bed:
         "bbc/bedtools/bedtools-2.29.2",
     shell:
         """
-        samtools view -@ {resources.threads} -H {input.TLEN3_bam} 1> {output.sam} 2> {log.get_sam}
+        samtools view -@ {resources.threads} -h {input.TLEN3_bam} 1> {output.sam} 2> {log.get_sam}
         awk '{{ if ($9 ==3) {{ print }} }}' {output.sam} 1> {output.TLEN3_tmp} 2> {log.TLEN3_tmp}
         awk -v OFS='\t' '{{ print $3,$8-3,$8 }}' {output.TLEN3_tmp} 1> {output.bed} 2> {log.get_bed}
         bedtools getfasta -tab -s -fi {params.ref} -bed {output.bed} -fo {output.seq} 2> {log.get_seq}

@@ -8,7 +8,7 @@ FT-SE6114*
 logs
 raw_data/*
 src/~*
+src/*test*
 test*
-
 
 .Rproj.user
