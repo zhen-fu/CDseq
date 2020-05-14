@@ -205,6 +205,10 @@ rule extract_TLEN3:
         TLEN3_tmp =         temp("analysis/extract_TLEN3/{sample}.tmp"),
         seq =               temp("analysis/extract_TLEN3/{sample}.TLEN3.seq"),
         bed =                    "analysis/extract_TLEN3/{sample}.TLEN3.bed",
+        sorted_bed =        temp("analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed"),
+        sorted_bed_gz =          "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz",
+        sorted_bed_gz_tbi =      "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz.tbi",
+
     params:
         ref = expand("{ref}", ref=config["ref"]),
         tmp = "analysis/extract_TLEN3/{sample}.TLEN3.tmp",
@@ -214,6 +218,8 @@ rule extract_TLEN3:
         get_bed =       "logs/extract_TLEN3/{sample}.get_bed.log",
         get_bed_name =  "logs/extract_TLEN3/{sample}.get_bed_name.log",
         get_seq =       "logs/extract_TLEN3/{sample}.get_seq.log",
+        sort_bed =      "logs/extract_TLEN3/{sample}.sort_bed.log",
+
     benchmark:
         "benchmarks/extract_TLEN3/{sample}.bmk"
     resources:
@@ -254,34 +260,6 @@ rule extract_TLEN3:
         tabix {output.sorted_bed_gz}
         """
 
-rule bed_sort_bgzip_tabix:
-    input:
-        bed =                    "analysis/extract_TLEN3/{sample}.TLEN3.bed",
-    output:
-        sorted_bed_gz =          "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz",
-        sorted_bed_gz_tbi =      "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz.tbi",
-    params:
-        sorted_bed =             "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed",
-    log:
-        sort_bed =      "logs/bed_sort_bgzip_tabix/{sample}.sort_bed.log",
-        bgzip =         "logs/bed_sort_bgzip_tabix/{sample}.bgzip.log",
-        tabix =         "logs/bed_sort_bgzip_tabix/{sample}.tabix.log",
-    benchmark:
-        "benchmarks/bed_sort_bgzip_tabix/{sample}.bmk"
-    resources:
-        nodes = 1,
-        threads = 32,
-        mem_gb = 300,
-    envmodules:
-        "bbc/samtools/samtools-1.9",
-        "bbc/bedtools/bedtools-2.29.2",
-        "bbc/htslib/htslib-1.10.2",
-    shell:
-        """
-        bedtools sort -i {input.bed} 1> {params.sorted_bed} 2> {log.sort_bed}
-        bgzip -@ {threads} {params.sorted_bed} 2> {log.bgzip}
-        tabix {output.sorted_bed_gz} 2> {log.sort_bed}
-        """
 rule lengthX_3prime_bed:
     input:
         bed =            "analysis/extract_TLEN3/{sample}.TLEN3.bed",
