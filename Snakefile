@@ -4,6 +4,7 @@ from snakemake.utils import validate, min_version
 min_version("5.15.0")
 
 ##### load config and sample sheets #####
+configfile: "bin/config.yaml"
 
 samples = pd.read_table("bin/samples.tsv").set_index("sample", drop=False)
 
@@ -38,7 +39,7 @@ rule all:
         # logo_bed
         expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
         # render_rmd
-        "bin/2020-05-04_PFEG-20200427-CDseq.html"
+        expand("bin/{report}.html", report=config["report"]),
 rule mergeLanesAndRename:
     input:
     output:
@@ -205,7 +206,7 @@ rule extract_TLEN3:
         seq =               temp("analysis/extract_TLEN3/{sample}.TLEN3.seq"),
         bed =                    "analysis/extract_TLEN3/{sample}.TLEN3.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
         tmp = "analysis/extract_TLEN3/{sample}.TLEN3.tmp",
     log:
         #get_sam =       "logs/extract_TLEN3/{sample}.get_sam.log",
@@ -289,7 +290,7 @@ rule lengthX_3prime_bed:
         bed_plus =  temp("analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.3prime.bed.bed_plus"),
         bed =             "analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.3prime.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
         tmp = "analysis/extract_TLEN3/{sample}.nt{num}.3prime.trinuc.tmp",
         nt =  "{num}"
     log:
@@ -326,7 +327,7 @@ rule lengthX_5prime_bed:
         bed_plus =  temp("analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.5prime.bed.bed_plus"),
         bed =             "analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.5prime.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
         tmp = "analysis/extract_TLEN3/{sample}.nt{num}.5prime.trinuc.tmp",
         nt =  "{num}"
     log:
@@ -363,7 +364,7 @@ rule logo_bed:
         seq =                "analysis/extract_TLEN3/{sample}.TLEN3.logo.seq",
         logo_bed =           "analysis/extract_TLEN3/{sample}.TLEN3.logo.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
     log:
         bed_tmp =  "logs/get_logo_seq/{sample}.bed_tmp.log",
         seq =      "logs/get_logo_seq/{sample}.seq_tmp.log",
@@ -393,38 +394,11 @@ rule render_rmd:
         nt_3prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.3prime.bed", len=[1,2], samples=samples.itertuples()),
         nt_5prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.5prime.bed", len=[1,2], samples=samples.itertuples()),
         logo_bed =  expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
-        rmd =              "bin/2020-05-04_PFEG-20200427-CDseq.Rmd",
+        rmd =       expand("bin/{report}.Rmd", report=config["report"]),
     output:
-        "bin/2020-05-04_PFEG-20200427-CDseq.html"
+        expand("bin/{report}.html", report=config["report"])
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
-    log:
-        "logs/render_rmd.log",
-    resources:
-        nodes = "node095",
-        threads = 1,
-        mem_gb = 300,
-    envmodules:
-        # using the R on node095 and associated libraries required for rendering figures.
-    shell:
-        """
-        # add rstudio-server pandoc installation to $PATH
-        PATH=/usr/lib/rstudio-server/bin/pandoc:$PATH
-
-        # render
-        R -e 'rmarkdown::render("{input.rmd}")' 2> {log}
-        """
-
-rule render_rmd_noLogo:
-    input:
-        nt_3prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.3prime.bed", len=[1,2], samples=samples.itertuples()),
-        nt_5prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.5prime.bed", len=[1,2], samples=samples.itertuples()),
-        logo_bed =  expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
-        rmd =              "bin/2020-05-04_PFEG-20200427-CDseq_noLogo.Rmd",
-    output:
-        "bin/2020-05-04_PFEG-20200427-CDseq_noLogo.html"
-    params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
     log:
         "logs/render_rmd.log",
     resources:
