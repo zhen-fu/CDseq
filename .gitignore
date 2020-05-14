@@ -1,5 +1,11 @@
+*.Rmd
+*lftp.sh
+*.docx
 */._*
+*DS_Store*
 ._*
+*.html
+*figure-html*
 .snakemake*
 analysis/*
 !analysis/.keep
@@ -7,8 +13,12 @@ benchmark*
 FT-SE6114*
 logs
 raw_data/*
-src/~*
-src/*test*
+bin/~*
+bin/render.sh
+bin/*test*
+*cache*
 test*
 
 .Rproj.user
+.Rhistory
+*.Rproj
