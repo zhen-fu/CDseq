@@ -4,6 +4,7 @@ from snakemake.utils import validate, min_version
 min_version("5.15.0")
 
 ##### load config and sample sheets #####
+configfile: "bin/config.yaml"
 
 samples = pd.read_table("bin/samples.tsv").set_index("sample", drop=False)
 
@@ -11,15 +12,15 @@ samples = pd.read_table("bin/samples.tsv").set_index("sample", drop=False)
 
 rule all:
     input:
-        # mergeLanesAndRename_PE
-        expand("raw_data/{samples.sample}-R1.fastq.gz", samples=samples.itertuples()),
-        expand("raw_data/{samples.sample}-R2.fastq.gz", samples=samples.itertuples()),
-        # trim_galore_hardtrim5
-        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime.fq.gz", samples=samples.itertuples()),
-        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime.fq.gz", samples=samples.itertuples()),
-        # trim_galore
-        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime_val_1.fq.gz", samples=samples.itertuples()),
-        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime_val_2.fq.gz", samples=samples.itertuples()),
+        # # mergeLanesAndRename_PE
+        # expand("raw_data/{samples.sample}-R1.fastq.gz", samples=samples.itertuples()),
+        # expand("raw_data/{samples.sample}-R2.fastq.gz", samples=samples.itertuples()),
+        # # trim_galore_hardtrim5
+        # expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        # expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        # # trim_galore
+        # expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime_val_1.fq.gz", samples=samples.itertuples()),
+        # expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime_val_2.fq.gz", samples=samples.itertuples()),
         # bwa_mem
         expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam", samples=samples.itertuples()),
         #expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam.bai", samples=samples.itertuples()),
@@ -38,7 +39,8 @@ rule all:
         # logo_bed
         expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
         # render_rmd
-        "bin/2020-05-04_PFEG-20200427-CDseq.html"
+        expand("bin/{report}.html", report=config["report"]),
+
 rule mergeLanesAndRename:
     input:
     output:
@@ -55,7 +57,7 @@ rule mergeLanesAndRename:
     envmodules:
         "bbc/R/R-3.6.0"
     script:
-        "src/mergeLanesAndRename.R"
+        "bin/mergeLanesAndRename.R"
 
 rule trim_galore_hardtrim5:
     input:
@@ -125,8 +127,6 @@ rule trim_galore:
         """
         trim_galore \
         --paired \
-        --three_prime_clip_R1 99 \
-        --three_prime_clip_R2 99 \
         --output_dir {params.outdir} \
         --cores {resources.threads} \
         -q 20 \
@@ -204,20 +204,26 @@ rule extract_TLEN3:
         TLEN3_tmp =         temp("analysis/extract_TLEN3/{sample}.tmp"),
         seq =               temp("analysis/extract_TLEN3/{sample}.TLEN3.seq"),
         bed =                    "analysis/extract_TLEN3/{sample}.TLEN3.bed",
+        sorted_bed_gz =          "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz",
+        sorted_bed_gz_tbi =      "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz.tbi",
+
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
-        tmp = "analysis/extract_TLEN3/{sample}.TLEN3.tmp",
+        ref =        expand("{ref}", ref=config["ref"]),
+        tmp =        "analysis/extract_TLEN3/{sample}.TLEN3.tmp",
+        sorted_bed = "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed",
     log:
         #get_sam =       "logs/extract_TLEN3/{sample}.get_sam.log",
         TLEN3_tmp =     "logs/extract_TLEN3/{sample}.TLEN3_tmp.log",
         get_bed =       "logs/extract_TLEN3/{sample}.get_bed.log",
         get_bed_name =  "logs/extract_TLEN3/{sample}.get_bed_name.log",
         get_seq =       "logs/extract_TLEN3/{sample}.get_seq.log",
+        sort_bed =      "logs/extract_TLEN3/{sample}.sort_bed.log",
+
     benchmark:
         "benchmarks/extract_TLEN3/{sample}.bmk"
     resources:
         nodes = 1,
-        threads = 32,
+        threads = 12,
         mem_gb = 300,
     envmodules:
         "bbc/samtools/samtools-1.9",
@@ -248,39 +254,11 @@ rule extract_TLEN3:
         awk 'BEGIN {{FS=OFS="\t"}} {{ $4 = $4 "_" $5; print $1, $2, $3, $4, $6, $7 }}' {output.bed} > {params.tmp} && mv {params.tmp} {output.bed}
 
         # sort the BED file, bgzip it, index with tabix
-        bedtools sort -i {output.bed} 1> {output.sorted_bed} 2> {log.sort_bed}
-        bgzip -@ {threads} {output.sorted_bed} {output.sorted_bed_gz}
+        bedtools sort -i {output.bed} 1> {params.sorted_bed} 2> {log.sort_bed}
+        bgzip -@ {threads} {params.sorted_bed}
         tabix {output.sorted_bed_gz}
         """
 
-rule bed_sort_bgzip_tabix:
-    input:
-        bed =                    "analysis/extract_TLEN3/{sample}.TLEN3.bed",
-    output:
-        sorted_bed_gz =          "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz",
-        sorted_bed_gz_tbi =      "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz.tbi",
-    params:
-        sorted_bed =             "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed",
-    log:
-        sort_bed =      "logs/bed_sort_bgzip_tabix/{sample}.sort_bed.log",
-        bgzip =         "logs/bed_sort_bgzip_tabix/{sample}.bgzip.log",
-        tabix =         "logs/bed_sort_bgzip_tabix/{sample}.tabix.log",
-    benchmark:
-        "benchmarks/bed_sort_bgzip_tabix/{sample}.bmk"
-    resources:
-        nodes = 1,
-        threads = 32,
-        mem_gb = 300,
-    envmodules:
-        "bbc/samtools/samtools-1.9",
-        "bbc/bedtools/bedtools-2.29.2",
-        "bbc/htslib/htslib-1.10.2",
-    shell:
-        """
-        bedtools sort -i {input.bed} 1> {params.sorted_bed} 2> {log.sort_bed}
-        bgzip -@ {threads} {params.sorted_bed} 2> {log.bgzip}
-        tabix {output.sorted_bed_gz} 2> {log.sort_bed}
-        """
 rule lengthX_3prime_bed:
     input:
         bed =            "analysis/extract_TLEN3/{sample}.TLEN3.bed",
@@ -289,7 +267,7 @@ rule lengthX_3prime_bed:
         bed_plus =  temp("analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.3prime.bed.bed_plus"),
         bed =             "analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.3prime.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
         tmp = "analysis/extract_TLEN3/{sample}.nt{num}.3prime.trinuc.tmp",
         nt =  "{num}"
     log:
@@ -326,7 +304,7 @@ rule lengthX_5prime_bed:
         bed_plus =  temp("analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.5prime.bed.bed_plus"),
         bed =             "analysis/extract_TLEN3/{sample}.TLEN3.nt{num}.5prime.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
         tmp = "analysis/extract_TLEN3/{sample}.nt{num}.5prime.trinuc.tmp",
         nt =  "{num}"
     log:
@@ -360,10 +338,10 @@ rule logo_bed:
         bed = "analysis/extract_TLEN3/{sample}.TLEN3.bed",
     output:
         bed_tmp =       temp("analysis/extract_TLEN3/{sample}.TLEN3.logo.bed_tmp"),
-        seq =                "analysis/extract_TLEN3/{sample}.TLEN3.logo.seq",
+        logo_seq =                "analysis/extract_TLEN3/{sample}.TLEN3.logo.seq",
         logo_bed =           "analysis/extract_TLEN3/{sample}.TLEN3.logo.bed",
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
     log:
         bed_tmp =  "logs/get_logo_seq/{sample}.bed_tmp.log",
         seq =      "logs/get_logo_seq/{sample}.seq_tmp.log",
@@ -381,10 +359,10 @@ rule logo_bed:
         awk 'BEGIN {{FS=OFS="\t"}} {{print $1, $2-9, $3+9, $4, $5, $6 }}' {input.bed} 1> {output.bed_tmp} 2> {log.bed_tmp}
 
         # get sequences from BED in strand-specific manner.
-        bedtools getfasta -s -tab -fi {params.ref} -bed {output.bed_tmp} -fo {output.seq} 2> {log.seq}
+        bedtools getfasta -s -tab -fi {params.ref} -bed {output.bed_tmp} -fo {output.logo_seq} 2> {log.seq}
 
         # merge new coordinates [chr, start, stop] with strand-aware element sequence [name, score, strand]
-        paste {output.bed_tmp} {output.seq} | \
+        paste {output.bed_tmp} {output.logo_seq} | \
         awk 'BEGIN {{FS=OFS="\t"}} {{ $4 = "cut_"i++"_"$8; print $1, $2, $3, $4, $5, $6 }}' 1> {output.logo_bed} 2> {log.logo_bed}
         """
 
@@ -393,38 +371,11 @@ rule render_rmd:
         nt_3prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.3prime.bed", len=[1,2], samples=samples.itertuples()),
         nt_5prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.5prime.bed", len=[1,2], samples=samples.itertuples()),
         logo_bed =  expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
-        rmd =              "bin/2020-05-04_PFEG-20200427-CDseq.Rmd",
+        rmd =       expand("bin/{report}.Rmd", report=config["report"]),
     output:
-        "bin/2020-05-04_PFEG-20200427-CDseq.html"
+        expand("bin/{report}.html", report=config["report"])
     params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
-    log:
-        "logs/render_rmd.log",
-    resources:
-        nodes = "node095",
-        threads = 1,
-        mem_gb = 300,
-    envmodules:
-        # using the R on node095 and associated libraries required for rendering figures.
-    shell:
-        """
-        # add rstudio-server pandoc installation to $PATH
-        PATH=/usr/lib/rstudio-server/bin/pandoc:$PATH
-
-        # render
-        R -e 'rmarkdown::render("{input.rmd}")' 2> {log}
-        """
-
-rule render_rmd_noLogo:
-    input:
-        nt_3prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.3prime.bed", len=[1,2], samples=samples.itertuples()),
-        nt_5prime = expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.5prime.bed", len=[1,2], samples=samples.itertuples()),
-        logo_bed =  expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
-        rmd =              "bin/2020-05-04_PFEG-20200427-CDseq_noLogo.Rmd",
-    output:
-        "bin/2020-05-04_PFEG-20200427-CDseq_noLogo.html"
-    params:
-        ref = "/primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa",
+        ref = expand("{ref}", ref=config["ref"]),
     log:
         "logs/render_rmd.log",
     resources:

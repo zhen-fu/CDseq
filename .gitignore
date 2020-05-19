@@ -16,9 +16,13 @@ raw_data/*
 bin/~*
 bin/render.sh
 bin/*test*
-*cache*
+
 test*
+*.tiff
+*.zip
 
 .Rproj.user
 .Rhistory
 *.Rproj
+*cache*
+*files

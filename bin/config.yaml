@@ -1,1 +1,5 @@
 PE_or_SE: PE
+
+ref: /primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa
+
+report: 2020-05-18_PFEG-20200427-CDseq_pilot.v3
