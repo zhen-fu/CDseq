@@ -12,15 +12,15 @@ samples = pd.read_table("bin/samples.tsv").set_index("sample", drop=False)
 
 rule all:
     input:
-        # mergeLanesAndRename_PE
-        expand("raw_data/{samples.sample}-R1.fastq.gz", samples=samples.itertuples()),
-        expand("raw_data/{samples.sample}-R2.fastq.gz", samples=samples.itertuples()),
-        # trim_galore_hardtrim5
-        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime.fq.gz", samples=samples.itertuples()),
-        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime.fq.gz", samples=samples.itertuples()),
-        # trim_galore
-        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime_val_1.fq.gz", samples=samples.itertuples()),
-        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime_val_2.fq.gz", samples=samples.itertuples()),
+        # # mergeLanesAndRename_PE
+        # expand("raw_data/{samples.sample}-R1.fastq.gz", samples=samples.itertuples()),
+        # expand("raw_data/{samples.sample}-R2.fastq.gz", samples=samples.itertuples()),
+        # # trim_galore_hardtrim5
+        # expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        # expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        # # trim_galore
+        # expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime_val_1.fq.gz", samples=samples.itertuples()),
+        # expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime_val_2.fq.gz", samples=samples.itertuples()),
         # bwa_mem
         expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam", samples=samples.itertuples()),
         #expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam.bai", samples=samples.itertuples()),
@@ -40,6 +40,7 @@ rule all:
         expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
         # render_rmd
         expand("bin/{report}.html", report=config["report"]),
+
 rule mergeLanesAndRename:
     input:
     output:
@@ -56,7 +57,7 @@ rule mergeLanesAndRename:
     envmodules:
         "bbc/R/R-3.6.0"
     script:
-        "src/mergeLanesAndRename.R"
+        "bin/mergeLanesAndRename.R"
 
 rule trim_galore_hardtrim5:
     input:
@@ -126,8 +127,6 @@ rule trim_galore:
         """
         trim_galore \
         --paired \
-        --three_prime_clip_R1 99 \
-        --three_prime_clip_R2 99 \
         --output_dir {params.outdir} \
         --cores {resources.threads} \
         -q 20 \
@@ -205,13 +204,13 @@ rule extract_TLEN3:
         TLEN3_tmp =         temp("analysis/extract_TLEN3/{sample}.tmp"),
         seq =               temp("analysis/extract_TLEN3/{sample}.TLEN3.seq"),
         bed =                    "analysis/extract_TLEN3/{sample}.TLEN3.bed",
-        sorted_bed =        temp("analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed"),
         sorted_bed_gz =          "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz",
         sorted_bed_gz_tbi =      "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed.gz.tbi",
 
     params:
-        ref = expand("{ref}", ref=config["ref"]),
-        tmp = "analysis/extract_TLEN3/{sample}.TLEN3.tmp",
+        ref =        expand("{ref}", ref=config["ref"]),
+        tmp =        "analysis/extract_TLEN3/{sample}.TLEN3.tmp",
+        sorted_bed = "analysis/extract_TLEN3/{sample}.TLEN3.sorted.bed",
     log:
         #get_sam =       "logs/extract_TLEN3/{sample}.get_sam.log",
         TLEN3_tmp =     "logs/extract_TLEN3/{sample}.TLEN3_tmp.log",
@@ -224,7 +223,7 @@ rule extract_TLEN3:
         "benchmarks/extract_TLEN3/{sample}.bmk"
     resources:
         nodes = 1,
-        threads = 32,
+        threads = 12,
         mem_gb = 300,
     envmodules:
         "bbc/samtools/samtools-1.9",
@@ -255,8 +254,8 @@ rule extract_TLEN3:
         awk 'BEGIN {{FS=OFS="\t"}} {{ $4 = $4 "_" $5; print $1, $2, $3, $4, $6, $7 }}' {output.bed} > {params.tmp} && mv {params.tmp} {output.bed}
 
         # sort the BED file, bgzip it, index with tabix
-        bedtools sort -i {output.bed} 1> {output.sorted_bed} 2> {log.sort_bed}
-        bgzip -@ {threads} {output.sorted_bed} {output.sorted_bed_gz}
+        bedtools sort -i {output.bed} 1> {params.sorted_bed} 2> {log.sort_bed}
+        bgzip -@ {threads} {params.sorted_bed}
         tabix {output.sorted_bed_gz}
         """
 
@@ -339,7 +338,7 @@ rule logo_bed:
         bed = "analysis/extract_TLEN3/{sample}.TLEN3.bed",
     output:
         bed_tmp =       temp("analysis/extract_TLEN3/{sample}.TLEN3.logo.bed_tmp"),
-        seq =                "analysis/extract_TLEN3/{sample}.TLEN3.logo.seq",
+        logo_seq =                "analysis/extract_TLEN3/{sample}.TLEN3.logo.seq",
         logo_bed =           "analysis/extract_TLEN3/{sample}.TLEN3.logo.bed",
     params:
         ref = expand("{ref}", ref=config["ref"]),
@@ -360,10 +359,10 @@ rule logo_bed:
         awk 'BEGIN {{FS=OFS="\t"}} {{print $1, $2-9, $3+9, $4, $5, $6 }}' {input.bed} 1> {output.bed_tmp} 2> {log.bed_tmp}
 
         # get sequences from BED in strand-specific manner.
-        bedtools getfasta -s -tab -fi {params.ref} -bed {output.bed_tmp} -fo {output.seq} 2> {log.seq}
+        bedtools getfasta -s -tab -fi {params.ref} -bed {output.bed_tmp} -fo {output.logo_seq} 2> {log.seq}
 
         # merge new coordinates [chr, start, stop] with strand-aware element sequence [name, score, strand]
-        paste {output.bed_tmp} {output.seq} | \
+        paste {output.bed_tmp} {output.logo_seq} | \
         awk 'BEGIN {{FS=OFS="\t"}} {{ $4 = "cut_"i++"_"$8; print $1, $2, $3, $4, $5, $6 }}' 1> {output.logo_bed} 2> {log.logo_bed}
         """
 

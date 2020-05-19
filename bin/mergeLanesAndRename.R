@@ -5,8 +5,8 @@ sink(log, type="message")
 library(tidyverse)
 library(yaml)
 
-config <- yaml.load_file("src/config.yaml")
-units <- read_tsv("src/samples.tsv")
+config <- yaml.load_file("bin/config.yaml")
+units <- read_tsv("bin/samples.tsv")
 samp <- snakemake@output[[1]] %>% gsub("raw_data/","",.) %>% gsub("(-.{2}).fastq.gz","",.)
 
 # check that fastq files are gzipped (have .gz suffix)
