@@ -1,5 +1,3 @@
 sample	unit	fq1	fq2
-CDNT	lane0	CDNT12_L000_R1_001.fastq.gz	CDNT12_L000_R2_001.fastq.gz
-CD600	lane0	CD60012_L000_R1_001.fastq.gz	CD60012_L000_R2_001.fastq.gz
-CD1000	lane0	CD100012_L000_R1_001.fastq.gz	CD100012_L000_R2_001.fastq.gz
-CD1500	lane0	CD150012_L000_R1_001.fastq.gz	CD150012_L000_R2_001.fastq.gz
+4HNE	lane0	4HNE_L000_R1_001.fastq.gz	4HNE_L000_R2_001.fastq.gz
+CTL	lane0	4HNE_ctl_L000_R1_001.fastq.gz	4HNE_ctl_L000_R2_001.fastq.gz

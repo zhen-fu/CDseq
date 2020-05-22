@@ -1,5 +1,7 @@
 PE_or_SE: PE
 
-ref: /primary/projects/bbc/references/mouse/sequence/mm10/gdna/gencode/GRCm38.primary_assembly.genome.fa
+ref: /primary/projects/bbc/references/human/sequence/hg38/gdna/primary_assembly/ucsc/hg38_ucsc_pa.fa
 
-report: 2020-05-18_PFEG-20200427-CDseq_pilot.v3
+idx: /primary/projects/bbc/references/human/indexes/hg38/bwa/hg38_ucsc_pa.fa
+
+report: 2020-05-21_PFEG-20200427-CDseq.4HNE
