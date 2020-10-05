@@ -8,11 +8,12 @@
 *figure-html*
 .snakemake*
 analysis/*
-!analysis/.keep
+analysis/.keep
 benchmark*
 FT-SE6114*
 logs
 raw_data/*
+!raw_data/.keep
 bin/~*
 bin/render.sh
 bin/*test*
