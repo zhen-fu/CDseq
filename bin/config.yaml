@@ -1,7 +1,5 @@
 PE_or_SE: PE
 
-PE_or_SE: PE
-
 ref:
   # path/to/reference/gDNA.fasta
   sequence:       /secondary/projects/bbc/research/prep_bbc_shared/data/mm10_gencode/sequence/mm10_gencode.fa
