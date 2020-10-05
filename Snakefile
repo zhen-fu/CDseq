@@ -75,7 +75,9 @@ rule all:
         expand("analysis/deeptools/{samples.sample}.compmat.gz", samples=samples.itertuples()),
         expand("analysis/deeptools/{samples.sample}.compmat.bed", samples=samples.itertuples()),
         expand("analysis/deeptools/{samples.sample}.profile.png", samples=samples.itertuples()),
+        expand("analysis/deeptools/{samples.sample}.heatmap.png", samples=samples.itertuples()),
         # "analysis/deeptools/compmat.gz",
+
         # "analysis/deeptools/compmat.bed",
         # "analysis/deeptools/heatmap.png",
         # getGCbigWig
@@ -524,6 +526,37 @@ rule deeptools_profile:
         2> {log}
 
         """
+
+rule deeptools_heatmap:
+    input:
+        compmat =    "analysis/deeptools/{sample}.compmat.gz",
+        compmatbed = "analysis/deeptools/{sample}.compmat.bed",
+    output:
+        heatmap =    "analysis/deeptools/{sample}.heatmap.png",
+    log:             "logs/deeptools/{sample}.deeptools_heatmap.log",
+    benchmark:
+                     "benchmarks/deeptools/{sample}.deeptools_heatmap.txt",
+    params:
+        binSize =    50,
+        after =      "3000",
+        before =     "3000",
+        body_len =   "5000",
+        genes =      config["ref"]["annotation"],
+        labels =     "{sample}",
+    resources:
+        nodes =      1,
+        threads =    8,
+        mem_gb =     100,
+    envmodules:      "bbc/deeptools/deeptools-3.3.1",
+    shell:
+        """
+        plotHeatmap \
+        -m {input.compmat} \
+        -out {output.heatmap} \
+        2> {log}
+
+        """
+
 
 rule getGCbigWig:
     input:
