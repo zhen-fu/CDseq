@@ -8,7 +8,9 @@
 *figure-html*
 .snakemake*
 analysis/*
-analysis/.keep
+!analysis/.keep
+analysis/TES_motifs/*
+!analysis/TES_motifs/mm10.TES.500bp.bed
 benchmark*
 FT-SE6114*
 logs

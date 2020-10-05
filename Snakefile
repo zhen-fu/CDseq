@@ -41,6 +41,51 @@ rule all:
         # render_rmd
         expand("bin/{report}.html", report=config["report"]),
 
+        # mergeLanesAndRename_PE
+        expand("raw_data/{samples.sample}-R1.fastq.gz", samples=samples.itertuples()),
+        expand("raw_data/{samples.sample}-R2.fastq.gz", samples=samples.itertuples()),
+        # trim_galore_hardtrim5
+        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime.fq.gz", samples=samples.itertuples()),
+        # trim_galore
+        expand("analysis/trim_reads/{samples.sample}-R1.50bp_5prime_val_1.fq.gz", samples=samples.itertuples()),
+        expand("analysis/trim_reads/{samples.sample}-R2.50bp_5prime_val_2.fq.gz", samples=samples.itertuples()),
+        # bwa_mem
+        expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam", samples=samples.itertuples()),
+        #expand("analysis/align/{samples.sample}.sorted.dupremoved.q20.bam.bai", samples=samples.itertuples()),
+        # extract_TLEN3
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.bam", samples=samples.itertuples()),
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.bam.bai", samples=samples.itertuples()),
+        # extract_bed
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.bed", samples=samples.itertuples()),
+        # bed_sort_bgzip_tabix
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.sorted.bed.gz", samples=samples.itertuples()),
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.sorted.bed.gz.tbi", samples=samples.itertuples()),
+        # lenX_3prime_bed
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.3prime.bed", len=[1,2], samples=samples.itertuples()),
+        # lenX_5prime_bed
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.nt{len}.5prime.bed", len=[1,2], samples=samples.itertuples()),
+        # logo_bed
+        expand("analysis/extract_TLEN3/{samples.sample}.TLEN3.logo.bed", samples=samples.itertuples()),
+        # render_rmd
+        # "bin/2020-05-18_PFEG-20200427-CDseq.UVB-2.html"
+        # deeptools_cov
+        expand("analysis/deeptools/{samples.sample}.bw", samples=samples.itertuples()),
+        # deeptools_heatmap
+        expand("analysis/deeptools/{samples.sample}.compmat.gz", samples=samples.itertuples()),
+        expand("analysis/deeptools/{samples.sample}.compmat.bed", samples=samples.itertuples()),
+        expand("analysis/deeptools/{samples.sample}.profile.png", samples=samples.itertuples()),
+        # "analysis/deeptools/compmat.gz",
+        # "analysis/deeptools/compmat.bed",
+        # "analysis/deeptools/heatmap.png",
+        # getGCbigWig
+        "analysis/getGCbigWig/mm10.GC.bw",
+        # deeptools_profile_GC
+        #"analysis/deeptools/profile.mm10.GC.png",
+        # logo_bed
+        "analysis/TES_motifs/mm10.TES.500bp.seq",
+        "analysis/TES_motifs/mm10.TES.500bp.logo.bed",
+
 rule mergeLanesAndRename:
     input:
     output:
@@ -391,4 +436,178 @@ rule render_rmd:
 
         # render
         R -e 'rmarkdown::render("{input.rmd}")' 2> {log}
+        """
+
+rule deeptools_cov:
+    input:
+        bam =             "analysis/extract_TLEN3/{sample}.TLEN3.bam",
+    params:
+        binsize =         50,
+        norm_method =     "RPGC",
+        eff_genome_size = 2407883318,
+        ignore_chr =      "chrX chrY chrM",
+    output:
+        bigwig =          "analysis/deeptools/{sample}.bw",
+    log:
+        stdout =          "logs/deeptools_cov/{sample}.o",
+        stderr =          "logs/deeptools_cov/{sample}.e",
+    benchmark:
+                          "benchmarks/deeptools/{sample}.txt",
+    resources:
+        nodes =           1,
+        threads =         8,
+        mem_gb =          100,
+    envmodules:
+                          "bbc/deeptools/deeptools-3.3.1",
+    shell:
+        # calulctate the coverage
+        ## for SE data: we don't extend read length to fragment length because we'd have to make a up avalue for fragment length from the bioanalyzer data or something.
+        ## for PE data: --extendReads used. "Reads with mates are always extended to match the fragment size defined by the two read mates.
+        ##              Unmated reads, mate reads that map too far apart (>4x fragment length) or even map to different chromosomes are treated like single-end reads."
+        ## eff. genome size was copied from https://deeptools.readthedocs.io/en/latest/content/feature/effectiveGenomeSize.html; we use the 'option 2(kmers)' method because bams were mapq filtered. Used the read length=50bp value
+        """
+        bamCoverage \
+        -p {resources.threads} \
+        --bam {input.bam} \
+        -o {output.bigwig} \
+        --binSize {params.binsize} \
+        --normalizeUsing {params.norm_method} \
+        --effectiveGenomeSize {params.eff_genome_size} \
+        --ignoreDuplicates \
+        --ignoreForNormalization {params.ignore_chr} \
+        --extendReads \
+        1>> {log.stdout} 2>> {log.stderr}
+        """
+
+rule deeptools_profile:
+    input:
+                     "analysis/deeptools/{sample}.bw",
+    output:
+        compmat =    "analysis/deeptools/{sample}.compmat.gz",
+        compmatbed = "analysis/deeptools/{sample}.compmat.bed",
+        profile =    "analysis/deeptools/{sample}.profile.png",
+    log:             "logs/deeptools/{sample}.deeptools_profile.log",
+    benchmark:
+                     "benchmarks/deeptools/{sample}.deeptools_profile.txt",
+    params:
+        binSize =    50,
+        after =      "3000",
+        before =     "3000",
+        body_len =   "5000",
+        genes =      config["ref"]["annotation"],
+        labels =     "{sample}",
+    resources:
+        nodes =      1,
+        threads =    8,
+        mem_gb =     100,
+    envmodules:      "bbc/deeptools/deeptools-3.3.1",
+    shell:
+        """
+        computeMatrix \
+        scale-regions \
+        -p {resources.threads} \
+        --binSize {params.binSize} \
+        -b {params.before} \
+        -a {params.after} \
+        --regionBodyLength {params.body_len} \
+        -R {params.genes} \
+        -S {input} \
+        --samplesLabel {params.labels} \
+        -o {output.compmat} \
+        --skipZeros \
+        --outFileSortedRegions {output.compmatbed} \
+        2> {log}
+
+        plotProfile \
+        -m {output.compmat} \
+        -out {output.profile} \
+        2> {log}
+
+        """
+
+rule getGCbigWig:
+    input:
+    output:
+        chrom_sizes =                   "analysis/getGCbigWig/mm10.chrom.sizes",
+        mm10_gc5Base_wigVarStep_wig =   "analysis/getGCbigWig/mm10.gc5Base.wigVarStep.wig",
+        GC_bw =                         "analysis/getGCbigWig/mm10.GC.bw",
+    log:
+        wget =                          "logs/getGCbigWig/wget.log",
+        wigToBigWig =                   "logs/getGCbigWig/getGCbigWig.log",
+    benchmark:                          "benchmarks/getGCbigWig/getGCbigWig.bmk",
+    resources:
+        nodes =                         1,
+        threads =                       1,
+        mem_gb =                        64,
+    envmodules:                         "bbc/ucsc/ucsc-2020.06.11",
+    shell:
+        """
+        wget http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes -O {output.chrom_sizes} 2> {log.wget}
+        wget http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/mm10.gc5Base.wigVarStep.gz -O - | gunzip -c > {output.mm10_gc5Base_wigVarStep_wig} 2>> {log.wget}
+
+        wigToBigWig {output.mm10_gc5Base_wigVarStep_wig} {output.chrom_sizes} {output.GC_bw} 2> {log.wigToBigWig}
+        """
+
+rule deeptools_computeMatrix_GC:
+    input:
+                     "analysis/getGCbigWig/mm10.GC.bw",
+    output:
+        compmat =    "analysis/deeptools/compmat.mm10.GC.gz",
+        compmatbed = "analysis/deeptools/compmat.mm10.GC.bed",
+    log:             "logs/deeptools/deeptools_computeMatrix.mm10.GC.log",
+    benchmark:       "benchmarks/deeptools/deeptools_computeMatrix.mm10.GC.bmk",
+    params:
+        binSize =    50,
+        after =      "3000",
+        before =     "3000",
+        body_len =   "5000",
+        genes =      config["ref"]["annotation"],
+        labels =     "mm10_%GC"
+    resources:
+        nodes =      1,
+        threads =    8,
+        mem_gb =     100,
+    envmodules:      "bbc/deeptools/deeptools-3.3.1",
+    shell:
+        """
+        computeMatrix \
+        scale-regions \
+        -p {resources.threads} \
+        --binSize {params.binSize} \
+        -b {params.before} \
+        -a {params.after} \
+        --regionBodyLength {params.body_len} \
+        -R {params.genes} \
+        -S {input} \
+        --samplesLabel {params.labels} \
+        -o {output.compmat} \
+        --skipZeros \
+        --outFileSortedRegions {output.compmatbed} \
+        2> {log}
+        """
+
+rule TES_logo_bed:
+    input:
+        bed =        "analysis/TES_motifs/mm10.TES.500bp.bed",
+    params:
+        ref =        config["ref"]["sequence"],
+    output:
+        seq =        "analysis/TES_motifs/mm10.TES.500bp.seq",
+        logo_bed =   "analysis/TES_motifs/mm10.TES.500bp.logo.bed",
+    log:             "logs/TES_motifs/TES_motifs.log",
+    benchmark:       "benchmarks/TES_motifs/TES_motifs.bmk",
+    resources:
+        nodes =      1,
+        threads =    32,
+        mem_gb =     100,
+    envmodules:      "bbc/samtools/samtools-1.9",
+                     "bbc/bedtools/bedtools-2.29.2",
+    shell:
+        """
+        # get sequences from BED in strand-specific manner.
+        bedtools getfasta -s -tab -fi {params.ref} -bed {input.bed} -fo {output.seq} 2> {log}
+
+        # merge new coordinates [chr, start, stop] with strand-aware element sequence [name, score, strand]
+        paste {input.bed} {output.seq} | \
+        awk 'BEGIN {{FS=OFS="\t"}} {{ $4 = "cut_"i++"_"$8; print $1, $2, $3, $4, $5, $6 }}' 1> {output.logo_bed} 2>> {log}
         """
